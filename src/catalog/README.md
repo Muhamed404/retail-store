@@ -33,48 +33,72 @@ Several "utility" endpoints are provided with useful functionality for various s
 | `POST`   | `/chaos/health`          | Causes all health check requests to fail                                           |
 | `DELETE` | `/chaos/health`          | Returns the health check to its default behavior                                   |
 
-## Running
+## Run it locally
 
-There are two main options for running the service:
+**Short version:** build and run the binary. It starts with built-in sample data. **You do not need MySQL** to try it.
 
-### Local
+### 1. What you need
 
-Note: You must already have a MySQL database running
+- Go 1.23 or newer. `go.mod` asks for toolchain `go1.24.5`; if your Go is older, it downloads the right one by itself on the first build (needs internet).
 
-Build the binary as follows:
-
-```
-go build -o main main.go
-```
-
-Then run it:
+### 2. Start it
 
 ```
-./main
+cd src/catalog
+go build -o catalog main.go
+./catalog
 ```
 
-Test access:
+### 3. Check that it works
 
 ```
-curl localhost:8080/catalogue
+curl localhost:8080/health                  # OK
+curl localhost:8080/catalog/size            # {"size":12}
+curl localhost:8080/catalog/products        # list of products
+curl localhost:8080/catalog/tags            # list of tags
 ```
 
-### Docker
+> The path is `/catalog/...`. Older notes that say `/catalogue` are wrong and return 404.
 
-A `docker-compose.yml` file is included to run the service in Docker, including a MySQL database:
-
-```
-DB_PASSWORD="testing" docker compose up
-```
-
-Test access:
+### 4. Run with the real MySQL database (optional)
 
 ```
-curl localhost:8080/catalogue
+docker run -d --name catalog-mysql -p 3306:3306 \
+  -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=catalogdb \
+  -e MYSQL_USER=catalog_user -e MYSQL_PASSWORD=testing mysql:8
+
+RETAIL_CATALOG_PERSISTENCE_PROVIDER=mysql \
+RETAIL_CATALOG_PERSISTENCE_ENDPOINT=localhost:3306 \
+RETAIL_CATALOG_PERSISTENCE_DB_NAME=catalogdb \
+RETAIL_CATALOG_PERSISTENCE_USER=catalog_user \
+RETAIL_CATALOG_PERSISTENCE_PASSWORD=testing \
+./catalog
 ```
 
-To clean up:
+The log says `Using mysql database localhost:3306`, and the tables are filled on first start. Wait about 20 seconds after `docker run` for MySQL to be ready. Clean up with `docker rm -f catalog-mysql`.
 
-```
-docker compose down
-```
+### 5. Docker
+
+The `Dockerfile` for this service is written in Phase 2 (issue #7). Until then, use the steps above.
+
+### Common problems
+
+| You see | Cause and fix |
+| ------- | ------------- |
+| First build is slow and prints `go: downloading ...` | Normal. Go is fetching modules and the toolchain. |
+| `bind: address already in use` | Port 8080 is busy. Use `PORT=8081 ./catalog`. |
+| `Error 1045` or `connection refused` with MySQL | MySQL is still starting, or the user and password do not match the ones in `docker run`. |
+
+### Running several services on one machine
+
+Every service listens on port **8080** by default, so two of them clash. Give each its own port with `PORT`:
+
+| Service | Suggested port |
+| ------- | -------------- |
+| ui | 8080 |
+| catalog | 8081 |
+| cart | 8082 |
+| orders | 8083 |
+| checkout | 8084 |
+
+Example: `PORT=8082 ./mvnw spring-boot:run`. To start the whole shop with one command, use the `docker-compose.yml` in the repository root (see the main README).

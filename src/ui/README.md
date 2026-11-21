@@ -44,36 +44,69 @@ Several "utility" endpoints are provided with useful functionality for various s
 | `GET`  | `/utility/store/{hash}`        | Return the payload from the file system previously written                  |
 | `GET`  | `/utility/stress/{iterations}` | Stress the CPU with the number of iterations increasing the CPU consumption |
 
-## Running
+## Run it locally
 
-There are two main options for running the service:
+**Short version:** `./mvnw spring-boot:run`, then open <http://localhost:8080>. You do not need any other service or database.
 
-### Local
+### 1. What you need
 
-Pre-requisites:
+- Java 21 (`java -version` must say 21)
+- Internet on the first run, to download dependencies
 
-- Java 21 installed
-
-Run the Spring Boot application like so:
+### 2. Start it
 
 ```
+cd src/ui
 ./mvnw spring-boot:run
 ```
 
-Test the application by visiting `http://localhost:8080` in a web browser.
+Wait for the line `Started UiApplication`.
 
-### Docker
-
-A `docker-compose.yml` file is included to run the service in Docker:
+### 3. Check that it works
 
 ```
-docker compose up
+curl localhost:8080/actuator/health        # {"status":"UP"}
 ```
 
-Test the application by visiting `http://localhost:8080` in a web browser.
+Open <http://localhost:8080> in a browser. You see the **Demo Store** with sample products. By default the UI uses **built-in mock data** for the catalog, cart, orders and checkout, so it works alone.
 
-To clean up:
+### 4. Connect it to the real services (optional)
+
+Start the other services first (see their READMEs), then tell the UI where they are:
 
 ```
-docker compose down
+RETAIL_UI_ENDPOINTS_CATALOG=http://localhost:8081 \
+RETAIL_UI_ENDPOINTS_CARTS=http://localhost:8082 \
+RETAIL_UI_ENDPOINTS_ORDERS=http://localhost:8083 \
+RETAIL_UI_ENDPOINTS_CHECKOUT=http://localhost:8084 \
+./mvnw spring-boot:run
 ```
+
+Use the ports from the table below.
+
+### 5. Docker
+
+The `Dockerfile` for this service is written in Phase 2 (issue #4). Until then, use the steps above.
+
+### Common problems
+
+| You see | Cause and fix |
+| ------- | ------------- |
+| `release version 21 not supported` or `invalid target release` | Your Java is older than 21. Run `java -version` and install Java 21. |
+| First start takes 1 to 3 minutes | Maven is downloading dependencies. Later starts take a few seconds. |
+| `Port 8080 was already in use` | Something else uses 8080. Start with another port: `PORT=8085 ./mvnw spring-boot:run` |
+| `./mvnw: Permission denied` | Run `chmod +x mvnw` once. |
+
+### Running several services on one machine
+
+Every service listens on port **8080** by default, so two of them clash. Give each its own port with `PORT`:
+
+| Service | Suggested port |
+| ------- | -------------- |
+| ui | 8080 |
+| catalog | 8081 |
+| cart | 8082 |
+| orders | 8083 |
+| checkout | 8084 |
+
+Example: `PORT=8082 ./mvnw spring-boot:run`. To start the whole shop with one command, use the `docker-compose.yml` in the repository root (see the main README).

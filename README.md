@@ -11,14 +11,15 @@ The application code comes from the MIT-licensed [AWS retail store sample app](h
 ## Contents
 
 1. [The application](#the-application)
-2. [Two repositories](#two-repositories)
-3. [Environments and delivery flow](#environments-and-delivery-flow)
-4. [Repository structure](#repository-structure)
-5. [File by file](#file-by-file)
-6. [Service configuration reference](#service-configuration-reference)
-7. [How this repo fits with Liveflow](#how-this-repo-fits-with-liveflow)
-8. [Build order](#build-order)
-9. [License](#license)
+2. [Run the services on your laptop](#run-the-services-on-your-laptop)
+3. [Two repositories](#two-repositories)
+4. [Environments and delivery flow](#environments-and-delivery-flow)
+5. [Repository structure](#repository-structure)
+6. [File by file](#file-by-file)
+7. [Service configuration reference](#service-configuration-reference)
+8. [How this repo fits with Liveflow](#how-this-repo-fits-with-liveflow)
+9. [Build order](#build-order)
+10. [License](#license)
 
 ---
 
@@ -39,6 +40,37 @@ The health paths are what Docker healthchecks and Kubernetes probes call; the me
 Every service can also run with `in-memory` storage, which is useful for a first build before any database exists.
 
 `cart` was written for Amazon DynamoDB. On-prem it points at **DynamoDB Local**, a container that speaks the same API, through `RETAIL_CART_PERSISTENCE_DYNAMODB_ENDPOINT`. No AWS account is needed.
+
+---
+
+## Run the services on your laptop
+
+Each service starts alone with built-in in-memory data, so you do **not** need any database to try it. Details, checks and common problems are in each service's README: [ui](src/ui/README.md) · [catalog](src/catalog/README.md) · [cart](src/cart/README.md) · [orders](src/orders/README.md) · [checkout](src/checkout/README.md).
+
+| Service | Needs | Start command (from its folder) | Check |
+|---|---|---|---|
+| ui | Java 21 | `./mvnw spring-boot:run` | `curl localhost:8080/actuator/health` |
+| catalog | Go 1.23+ | `go build -o catalog main.go && ./catalog` | `curl localhost:8080/health` |
+| cart | Java 21 | `./mvnw spring-boot:run` | `curl localhost:8080/actuator/health` |
+| orders | Java 21 | `./mvnw spring-boot:run` | `curl localhost:8080/actuator/health` |
+| checkout | Node 20+, yarn | `yarn install && yarn serve` | `curl localhost:8080/health` |
+
+All five use port 8080 by default, so to run **several at once** give each its own `PORT`. This works (open <http://localhost:8080> at the end; the UI then shows real data from the catalog service):
+
+```bash
+# one terminal each, from the repository root
+(cd src/catalog  && go build -o catalog main.go && PORT=8081 ./catalog)
+(cd src/cart     && PORT=8082 ./mvnw spring-boot:run)
+(cd src/orders   && PORT=8083 ./mvnw spring-boot:run)
+(cd src/checkout && yarn install && PORT=8084 RETAIL_CHECKOUT_ENDPOINTS_ORDERS=http://localhost:8083 yarn serve)
+(cd src/ui       && PORT=8080 \
+   RETAIL_UI_ENDPOINTS_CATALOG=http://localhost:8081 \
+   RETAIL_UI_ENDPOINTS_CARTS=http://localhost:8082 \
+   RETAIL_UI_ENDPOINTS_ORDERS=http://localhost:8083 \
+   RETAIL_UI_ENDPOINTS_CHECKOUT=http://localhost:8084 ./mvnw spring-boot:run)
+```
+
+The easier way to run everything, with the real databases, is `docker compose up` from the repository root. That file is written in Phase 2 (issue #9).
 
 ---
 
@@ -249,8 +281,9 @@ Every service listens on `PORT` (default `8080`). Values shown are what the **on
 | `RETAIL_CART_PERSISTENCE_DYNAMODB_ENDPOINT` | `http://carts-db:8000` (DynamoDB Local) |
 | `RETAIL_CART_PERSISTENCE_DYNAMODB_TABLE_NAME` | `Items` |
 | `RETAIL_CART_PERSISTENCE_DYNAMODB_CREATE_TABLE` | `true` |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | any dummy text, but **must be set** |
 
-DynamoDB Local accepts any credentials, but the AWS client still expects them to be set: use dummy values for `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
+DynamoDB Local accepts any credentials, but the AWS client still fails with `Unable to load credentials` if these two are not set (`AWS_REGION` is not needed). Put dummy values in `.env` (Compose) and in the ConfigMap or Secret (Kubernetes).
 
 **orders**
 | Variable | Value |
